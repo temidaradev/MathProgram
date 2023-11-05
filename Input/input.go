@@ -1,81 +1,71 @@
-package main
+package Input
 
 import (
 	"bufio"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
-	"regexp"
-	"sort"
+	"strconv"
 	"strings"
-	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
-type wordsHistogram struct {
-	words map[string]int
-	input []string
-}
+func Input() {
+	scanner := bufio.NewScanner(os.Stdin)
 
-var nonAlphanumericRegex = regexp.MustCompile(`[^\p{L}\p{N} ]+`)
+	usernameSli := []string{}
+	userID := []int{}
 
-func clearString(str string) string {
-	return nonAlphanumericRegex.ReplaceAllString(str, "")
-}
-
-func main() {
-	text, err := os.Open("lorem.txt")
+	db, err := sql.Open("sqlite3", "security.db")
+	defer db.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer text.Close()
 
-	w := wordsHistogram{
-		words: map[string]int{},
-		input: []string{},
+	fmt.Println("Not Your Enter Real ID Just Enter Like 1, 4, 6, 7")
+	fmt.Print("Enter Your ID:")
+	scanner.Scan()
+	id, err := strconv.ParseInt(scanner.Text(), 10, 32)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	scanner := bufio.NewScanner(text)
-	scanner.Split(bufio.ScanWords)
+	fmt.Print("Enter Your Username:")
+	scanner.Scan()
+	username := scanner.Text()
 
-	for scanner.Scan() {
-		str := clearString(scanner.Text())
-		w.input = strings.Fields(str)
-		for _, word := range w.input {
-			_, matched := w.words[word]
-			if matched {
-				w.words[word] += 1
-			} else {
-				w.words[word] = 1
+	userID = append(userID, int(id))
+	usernameSli = append(usernameSli, username)
+
+	insertStmt := `
+INSERT INTO user (id, username) VALUES (?, ?);
+`
+	changeStmt := `
+UPDATE user
+SET username = ? 
+WHERE id = ?;
+`
+
+	fmt.Print("Enter 'first' to insert or 'still' to update: ")
+	scanner.Scan()
+	secim := strings.ToLower(scanner.Text())
+
+	if secim == "first" {
+		for i := 0; i < len(userID); i++ {
+			_, err = db.Exec(insertStmt, userID[i], usernameSli[i])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	} else if secim == "still" {
+		for i := 0; i < len(userID); i++ {
+			_, err = db.Exec(changeStmt, usernameSli[i], userID[i])
+			if err != nil {
+				log.Fatal(err)
 			}
 		}
 	}
-
-	type KeyValue struct {
-		Key   string
-		Value int
-	}
-
-	var sortBigToLow []KeyValue
-
-	for k, v := range w.words {
-		sortBigToLow = append(sortBigToLow, KeyValue{k, v})
-	}
-
-	sort.Slice(sortBigToLow, func(i, j int) bool {
-		return sortBigToLow[i].Value > sortBigToLow[j].Value
-	})
-
-	for _, kv := range sortBigToLow {
-		time.Sleep(10 * time.Millisecond)
-		fmt.Printf("%s -% d\n", kv.Key, kv.Value)
-	}
-
-	fmt.Println(len(w.words))
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
 }
 
-func (w *wordsHistogram) countWords(text string, turn int) {
-	w.words[text] = turn
-}
